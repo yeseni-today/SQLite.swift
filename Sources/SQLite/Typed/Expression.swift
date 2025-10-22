@@ -35,10 +35,48 @@ public protocol ExpressionType: Expressible, CustomStringConvertible { // extens
 
 extension ExpressionType {
 
+    /// Initiaize expression with **literal*.
+    ///
+    ///     let users = Table("users")
+    ///
+    ///     // quoted
+    ///     let id = Expression<String>("id")
+    ///     id.asSQL()  // "id"
+    ///     users.select(id) // SELECT "id" FROM users
+    ///
+    ///	    // literal
+    ///     let minID = Expression<String>(literal: "min(id)")
+    ///     let true = Expression<Int>(literal: "TRUE")
+    ///     let const = Expression<String>(literal: "'CONST VALUE'")
+    ///
+    ///     minID.asSQL() // min(id)
+    ///     true.asSQL() // TRUE
+    ///     const.asSQL() // 'CONST VALUE'
+    ///
+    ///     users.select(minID, true, const) // SELECT min(id), TRUE, 'CONST VALUE' FROM users
     public init(literal: String) {
         self.init(literal, [])
     }
 
+    /// Initiaize expression with **quoted**.
+    ///
+    ///     let users = Table("users")
+    ///
+    ///     // quoted
+    ///     let id = Expression<String>("id")
+    ///     id.asSQL()  // "id"
+    ///     users.select(id) // SELECT "id" FROM users
+    ///
+    ///        // literal
+    ///     let minID = Expression<String>(literal: "min(id)")
+    ///     let true = Expression<Int>(literal: "TRUE")
+    ///     let const = Expression<String>(literal: "'CONST VALUE'")
+    ///
+    ///     minID.asSQL() // min(id)
+    ///     true.asSQL() // TRUE
+    ///     const.asSQL() // 'CONST VALUE'
+    ///
+    ///     users.select(minID, true, const) // SELECT min(id), TRUE, 'CONST VALUE' FROM users
     public init(_ identifier: String) {
         self.init(literal: identifier.quote())
     }

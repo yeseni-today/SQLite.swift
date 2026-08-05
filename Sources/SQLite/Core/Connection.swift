@@ -102,8 +102,15 @@ public final class Connection {
     ///
     ///     Default: `false`.
     ///
+    ///   - qos: The quality of service of the connection queue.
+    ///
+    ///     Default: `.unspecified`.
+    ///
     /// - Returns: A new database connection.
-    public init(_ location: Location = .inMemory, readonly: Bool = false) throws {
+    public init(_ location: Location = .inMemory,
+                readonly: Bool = false,
+                qos: DispatchQoS = .unspecified) throws {
+        queue = DispatchQueue(label: "SQLite.Database", qos: qos)
         let flags = readonly ? SQLITE_OPEN_READONLY : (SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE)
         try check(sqlite3_open_v2(location.description,
                                   &_handle,
@@ -123,11 +130,17 @@ public final class Connection {
     ///
     ///     Default: `false`.
     ///
+    ///   - qos: The quality of service of the connection queue.
+    ///
+    ///     Default: `.unspecified`.
+    ///
     /// - Throws: `Result.Error` iff a connection cannot be established.
     ///
     /// - Returns: A new database connection.
-    public convenience init(_ filename: String, readonly: Bool = false) throws {
-        try self.init(.uri(filename), readonly: readonly)
+    public convenience init(_ filename: String,
+                            readonly: Bool = false,
+                            qos: DispatchQoS = .unspecified) throws {
+        try self.init(.uri(filename), readonly: readonly, qos: qos)
     }
 
     deinit {
@@ -703,7 +716,7 @@ public final class Connection {
         throw error
     }
 
-    public fileprivate(set) var queue = DispatchQueue(label: "SQLite.Database", attributes: [])
+    public fileprivate(set) var queue: DispatchQueue
 
     fileprivate static let queueKey = DispatchSpecificKey<Int>()
 

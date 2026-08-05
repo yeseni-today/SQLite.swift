@@ -47,6 +47,16 @@ class ConnectionTests: SQLiteTestCase {
         XCTAssertEqual(url.lastPathComponent, "SQLite.swift Tests.sqlite3")
     }
 
+    func test_init_withLocationAndQoS_configuresConnectionQueue() throws {
+        let db = try Connection(.temporary, qos: .userInitiated)
+        XCTAssertEqual(db.queue.qos, .userInitiated)
+    }
+
+    func test_init_withStringAndQoS_configuresConnectionQueue() throws {
+        let db = try Connection("\(NSTemporaryDirectory())/SQLite.swift QoS Tests.sqlite3", qos: .userInitiated)
+        XCTAssertEqual(db.queue.qos, .userInitiated)
+    }
+
     func test_init_with_Uri_and_Parameters() throws {
         let testDb = fixture("test", withExtension: "sqlite")
         _ = try Connection(.uri(testDb, parameters: [.cache(.shared)]))

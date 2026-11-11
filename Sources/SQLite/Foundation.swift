@@ -64,14 +64,18 @@ extension Date: Value {
 // Decoding via `dateFormatter` costs ~45 µs per column (ICU parse) and dominates row
 // decoding for large batches; `ISO8601DateFormatter` parses no faster and rejects
 // the stored no-suffix shape. The fast path below accepts exactly the canonical
-// 23-byte `yyyy-MM-dd'T'HH:mm:ss.SSS` shape written by `dateFormatter`, hands the
-// calendar math to a fixed UTC `Calendar`, and falls back to the legacy formatter
-// for anything else — non-canonical shapes and pre-1970 strings (where ICU
-// interprets dates under the Julian calendar before 1582) — so observable behavior
-// (including the force-unwrap trap) is unchanged.
+// 23-byte `yyyy-MM-dd'T'HH:mm:ss.SSS` shape written by `dateFormatter` and falls
+// back to the legacy formatter for anything else — non-canonical shapes and
+// pre-1970 strings (where ICU interprets dates under the Julian calendar before
+// 1582) — so observable behavior (including the force-unwrap trap) is unchanged.
+// The calendar math is pure integer arithmetic (Howard Hinnant's days_from_civil):
+// no shared mutable state, safe for concurrent connections, and pinned to the
+// legacy formatter by whole-domain differential tests (1970–9999).
 extension Date {
 
-    static func fastParse(_ string: String) -> Date? {
+    /// Non-trapping parse of the canonical `yyyy-MM-dd'T'HH:mm:ss.SSS` (UTC) shape;
+    /// nil for every other shape. Equivalent to `Date.fromDatatypeValue` on success.
+    public static func fastParse(_ string: String) -> Date? {
         let bytes = Array(string.utf8)
         guard bytes.count == 23,
             bytes[4] == 45, bytes[7] == 45, bytes[10] == 84,
@@ -93,37 +97,30 @@ extension Date {
             let millisecond = number(20..<23)
         else { return nil }
 
-        guard (1...12).contains(month), (1...31).contains(day), isValidDay(year, month, day),
+        guard (1...12).contains(month), (1...31).contains(day), day <= days(inYear: year, month: month),
             hour <= 23, minute <= 59, second <= 59, millisecond <= 999
         else { return nil }
 
-        var components = DateComponents()
-        components.year = year
-        components.month = month
-        components.day = day
-        components.hour = hour
-        components.minute = minute
-        components.second = second
-        guard let base = utcCalendar.date(from: components) else { return nil }
-        let seconds = Int(exactly: base.timeIntervalSince1970.rounded()) ?? -1
+        let days = daysFromCivil(year: year, month: month, day: day)
+        let seconds = days * 86_400 &+ hour &* 3_600 &+ minute &* 60 &+ second
         guard seconds >= 0 else { return nil }
         return Date(timeIntervalSince1970: TimeInterval(seconds) + TimeInterval(millisecond) / 1_000)
     }
 
-    private static let utcCalendar: Calendar = {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-        return calendar
-    }()
+    private static func days(inYear year: Int, month: Int) -> Int {
+        let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
+        return month == 2 ? (leap ? 29 : 28) : 30 + (month + (month > 7 ? 1 : 0)) % 2
+    }
 
-    private static func isValidDay(_ year: Int, _ month: Int, _ day: Int) -> Bool {
-        var components = DateComponents()
-        components.year = year
-        components.month = month
-        components.day = 1
-        guard let firstOfMonth = utcCalendar.date(from: components) else { return false }
-        let length = utcCalendar.range(of: .day, in: .month, for: firstOfMonth)?.count ?? 0
-        return day >= 1 && day <= length
+    /// Howard Hinnant's `days_from_civil`, days since 1970-01-01 for a proleptic
+    /// Gregorian date.
+    private static func daysFromCivil(year y0: Int, month: Int, day: Int) -> Int {
+        let y = y0 &- (month <= 2 ? 1 : 0)
+        let era = (y >= 0 ? y : y - 399) / 400
+        let yoe = y - era * 400
+        let doy = (153 * (month + (month > 2 ? -3 : 9)) + 2) / 5 + day - 1
+        let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
+        return era * 146_097 + doe - 719_468
     }
 
 }
